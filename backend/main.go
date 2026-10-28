@@ -10,7 +10,7 @@ import (
 	sdk "github.com/t8y2/dbx/plugins/sdk/go/dbx-plugin-sdk"
 )
 
-const pluginID = "io.github.dbx-loki.loki"
+const pluginID = "io.github.seaways1015-afk.loki"
 const version = "0.1.0"
 
 type request struct {

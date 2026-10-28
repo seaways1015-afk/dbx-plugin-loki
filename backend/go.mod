@@ -1,4 +1,4 @@
-module github.com/dbx-loki/dbx-plugin-loki
+module github.com/seaways1015-afk/dbx-plugin-loki
 
 go 1.22
 

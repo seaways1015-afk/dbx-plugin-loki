@@ -1,13 +1,13 @@
 {
   "$schema": "https://raw.githubusercontent.com/t8y2/dbx/main/plugins/manifest.schema.json",
   "manifest_version": 1,
-  "id": "io.github.dbx-loki.loki",
+  "id": "io.github.seaways1015-afk.loki",
   "name": "Loki",
   "version": "0.1.0",
-  "publisher": "dbx-loki",
+  "publisher": "seaways1015-afk",
   "description": "Query, browse and live-tail Grafana Loki logs with LogQL inside DBX, with read-only AI tools.",
-  "source": "https://github.com/dbx-loki/dbx-plugin-loki",
-  "homepage": "https://github.com/dbx-loki/dbx-plugin-loki",
+  "source": "https://github.com/seaways1015-afk/dbx-plugin-loki",
+  "homepage": "https://github.com/seaways1015-afk/dbx-plugin-loki",
   "icon": "assets/plugin.svg",
   "engines": {
     "dbx": ">=0.6.43",
@@ -29,7 +29,7 @@
   "contributions": [
     {
       "type": "connection-provider",
-      "id": "io.github.dbx-loki.loki.connection",
+      "id": "io.github.seaways1015-afk.loki.connection",
       "label": "Loki",
       "icon": "assets/plugin.svg",
       "database_type": "loki",
@@ -180,7 +180,7 @@
           }
         }
       ],
-      "workbench": "io.github.dbx-loki.loki.workbench",
+      "workbench": "io.github.seaways1015-afk.loki.workbench",
       "capabilities": [
         "test",
         "connect",
@@ -189,7 +189,7 @@
     },
     {
       "type": "workbench",
-      "id": "io.github.dbx-loki.loki.workbench",
+      "id": "io.github.seaways1015-afk.loki.workbench",
       "label": "Loki Explorer",
       "description": "LogQL editor, label browser, log volume and live tail.",
       "icon": "assets/plugin.svg"
@@ -200,7 +200,7 @@
       "name": "Loki",
       "description": "在 DBX 中用 LogQL 查询、浏览和实时跟踪 Grafana Loki 日志，并为 AI 助手提供只读工具。",
       "contributions": {
-        "io.github.dbx-loki.loki.connection": {
+        "io.github.seaways1015-afk.loki.connection": {
           "label": "Loki",
           "description": "通过 HTTP API 连接 Grafana Loki 服务或网关。",
           "fields": {
@@ -247,7 +247,7 @@
             }
           }
         },
-        "io.github.dbx-loki.loki.workbench": {
+        "io.github.seaways1015-afk.loki.workbench": {
           "label": "Loki 日志查询",
           "description": "LogQL 编辑器、标签浏览、日志量直方图和实时跟踪。"
         }
