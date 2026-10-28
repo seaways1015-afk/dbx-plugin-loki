@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addHistory, addLabelMatcher, compareNs, detectLevel, formatTimestamp, highlightSegments, isMetricQuery,
-  lineFilterTerms, msToNs, nextNs, nsToMs, selectorOf, splitMatchers, varyingLabels,
+  lineFilterTerms, LiveCursor, msToNs, nextNs, nsToMs, selectorOf, splitMatchers, varyingLabels,
 } from './logql';
 
 describe('addLabelMatcher', () => {
@@ -78,6 +78,35 @@ describe('timestamps', () => {
   });
   it('formats with millisecond precision', () => {
     expect(formatTimestamp('1700000000123456789', true)).toBe('2023-11-14 22:13:20.123');
+  });
+});
+
+describe('LiveCursor', () => {
+  const s = (sec: number) => `${sec}000000000`;
+  const api = (sec: number, line: string) => ({ ts: s(sec), line, labels: { app: 'api' } });
+  const worker = (sec: number, line: string) => ({ ts: s(sec), line, labels: { app: 'worker' } });
+
+  it('polls from the overlap window before the newest line', () => {
+    const cursor = new LiveCursor(s(100));
+    expect(cursor.start).toBe(s(90));
+    cursor.accept([api(105, 'a')]);
+    expect(cursor.start).toBe(s(95));
+  });
+  it('keeps late lines older than the newest one and skips lines already shown', () => {
+    const cursor = new LiveCursor(s(100), [api(99, 'shown')]);
+    expect(cursor.accept([api(99, 'shown'), api(104, 'a')])).toEqual([api(104, 'a')]);
+    // A batching agent delivers a line from 101 s after the 104 s line was shown.
+    expect(cursor.accept([api(104, 'a'), worker(101, 'late')])).toEqual([worker(101, 'late')]);
+    expect(cursor.accept([worker(101, 'late'), api(104, 'a')])).toEqual([]);
+  });
+  it('treats equal timestamps in different streams or with different lines as distinct', () => {
+    const cursor = new LiveCursor(s(100));
+    expect(cursor.accept([api(101, 'x'), worker(101, 'x'), api(101, 'y')])).toHaveLength(3);
+  });
+  it('forgets lines that left the overlap window', () => {
+    const cursor = new LiveCursor(s(100), [api(95, 'old')]);
+    cursor.accept([api(120, 'new')]);
+    expect((cursor as unknown as { seen: Map<string, string> }).seen.size).toBe(1);
   });
 });
 

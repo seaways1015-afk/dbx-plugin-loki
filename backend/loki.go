@@ -514,8 +514,11 @@ func histogramStep(window timeRange) int {
 
 // tail returns entries newer than `start` in ascending order. The UI polls it
 // to implement live tailing without holding a WebSocket inside the sidecar.
+// The UI re-reads an overlap window to catch late lines, so the newest lines
+// are fetched (backward): fetching forward could return only already-shown
+// lines once the overlap holds more than the limit, and the tail would stall.
 func (s *session) tail(form queryForm, now time.Time) (*logsResult, error) {
-	form.Direction = "forward"
+	form.Direction = "backward"
 	if strings.TrimSpace(form.Start) == "" {
 		form.Start = nanos(now.Add(-time.Minute).UnixNano())
 	}
@@ -523,5 +526,10 @@ func (s *session) tail(form queryForm, now time.Time) (*logsResult, error) {
 	if form.Limit <= 0 || form.Limit > 1000 {
 		form.Limit = 1000
 	}
-	return s.queryRange(form, now)
+	result, err := s.queryRange(form, now)
+	if err != nil {
+		return nil, err
+	}
+	sortEntries(result.Entries, "forward")
+	return result, nil
 }

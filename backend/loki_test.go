@@ -285,15 +285,15 @@ func TestHistogramWrapsQuery(t *testing.T) {
 	}
 }
 
-func TestTailUsesForwardDirection(t *testing.T) {
+func TestTailFetchesNewestAndReturnsAscending(t *testing.T) {
 	f := newFakeLoki(t, defaultHandler)
 	p := openPlugin(t, f, f.connection())
 	raw, err := p.handle("loki/tail", request{ConnectionID: "c1", Form: queryForm{Query: `{app=~".+"}`, Start: "1799999980000000000"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.last().URL.Query().Get("direction") != "forward" {
-		t.Fatal("tail must query forward")
+	if f.last().URL.Query().Get("direction") != "backward" {
+		t.Fatal("tail must fetch the newest lines (backward) so an overlap window cannot stall it")
 	}
 	entries := raw.(*logsResult).Entries
 	if entries[0].Line != "api old" || entries[len(entries)-1].Line != "api new" {

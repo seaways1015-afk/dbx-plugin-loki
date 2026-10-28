@@ -31,6 +31,50 @@ export function compareNs(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+// Live tail polls re-read the last liveOverlapMs before the newest line seen,
+// because agents that batch pushes (Promtail, Alloy) deliver lines whose
+// timestamps are older than lines other agents already delivered. Lines that
+// were already shown are skipped by identity.
+export const liveOverlapMs = 10_000;
+
+type LiveEntry = { ts: string; line: string; labels: Record<string, string> };
+
+function liveKey(entry: LiveEntry): string {
+  const labels = Object.keys(entry.labels).sort().map(key => `${key}=${entry.labels[key]}`).join(',');
+  return `${entry.ts}\u0000${labels}\u0000${entry.line}`;
+}
+
+export class LiveCursor {
+  private newest: string;
+  private readonly seen = new Map<string, string>();
+
+  constructor(newest: string, shown: LiveEntry[] = [], private readonly overlapNs = BigInt(liveOverlapMs) * nsPerMs) {
+    this.newest = newest;
+    this.accept(shown);
+  }
+
+  /** Start of the next poll window, in nanoseconds. */
+  get start(): string {
+    const start = BigInt(this.newest) - this.overlapNs;
+    return (start > 0n ? start : 1n).toString();
+  }
+
+  /** Returns the entries not seen before, in input order, and advances the cursor. */
+  accept<T extends LiveEntry>(entries: T[]): T[] {
+    const fresh: T[] = [];
+    for (const entry of entries) {
+      const key = liveKey(entry);
+      if (this.seen.has(key)) continue;
+      this.seen.set(key, entry.ts);
+      fresh.push(entry);
+      if (compareNs(entry.ts, this.newest) > 0) this.newest = entry.ts;
+    }
+    const floor = this.start;
+    for (const [key, ts] of this.seen) if (compareNs(ts, floor) < 0) this.seen.delete(key);
+    return fresh;
+  }
+}
+
 function pad(value: number, size = 2): string {
   return String(value).padStart(size, '0');
 }

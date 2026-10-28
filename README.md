@@ -11,7 +11,7 @@
 - **LogQL 编辑器**：语法高亮，自动补全标签名、标签值、函数和解析器；`Shift+Enter` / `Ctrl+Enter` 执行。
 - **日志列表**：多个流按时间合并排序，按级别着色，高亮 `|=` / `|~` 匹配的关键词；点开一行可以看全部标签、一键加入或排除筛选、复制原文。
 - **日志量柱状图**：按时间段统计匹配行数，点击柱子放大到该时间段。
-- **实时跟踪**：每 2 秒拉取一次新日志（基于 `query_range` 轮询，不需要 WebSocket），最多保留 5000 行。
+- **实时跟踪**：每 2 秒拉取一次新日志（基于 `query_range` 轮询，不需要 WebSocket），每次回看 10 秒并去重，采集端批量延迟推送的日志也不会漏；最多保留 5000 行。
 - **指标查询**：`rate`、`count_over_time`、`sum by` 等返回折线图和序列表。
 - **AI**：
   - 「问 AI」按钮：把当前日志样本发给 DBX 内置 AI 分析。
@@ -75,7 +75,7 @@ Query, browse and live-tail Grafana Loki logs with LogQL inside DBX, without run
 - **LogQL editor**: highlighting, completion for labels, values, functions and parsers; run with Shift+Enter.
 - **Log list**: streams merged by timestamp, level colors, highlighted line-filter matches, and expandable rows with label filters and copy.
 - **Log volume histogram**: click a bar to zoom into that time range.
-- **Live tail**: polls `query_range` every 2 s and keeps up to 5000 lines.
+- **Live tail**: polls `query_range` every 2 s, re-reading the last 10 s with de-duplication so lines that batching agents push late are not lost; keeps up to 5000 lines.
 - **Metric queries**: rendered as a chart and series table.
 - **AI**: an "Ask AI" button, plus four read-only tools for the DBX AI agent (opt in under Plugin Center → Installed → AI tools).
 

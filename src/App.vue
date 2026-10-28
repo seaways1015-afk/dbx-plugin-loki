@@ -4,7 +4,7 @@ import { call, errorMessage, loadState, plugin, saveState, type HistogramResult,
 import { messages } from './i18n';
 import {
   addHistory, addLabelMatcher, compareNs, datetimeLocalToMs, formatBytes, formatTimestamp, isMetricQuery,
-  lineFilterTerms, msToDatetimeLocal, msToNs, nextNs, rangePresets,
+  lineFilterTerms, LiveCursor, msToDatetimeLocal, msToNs, rangePresets,
 } from './logql';
 import LabelBrowser from './components/LabelBrowser.vue';
 import LogList from './components/LogList.vue';
@@ -45,7 +45,7 @@ const ranQuery = ref('');
 
 const live = ref(false);
 let liveTimer: ReturnType<typeof setTimeout> | undefined;
-let liveCursor = '';
+let liveCursor: LiveCursor | undefined;
 let runToken = 0;
 
 const labelBrowser = ref<InstanceType<typeof LabelBrowser>>();
@@ -146,6 +146,11 @@ async function run() {
     logList.value?.resetPaging();
   } catch (err) {
     if (token !== runToken) return;
+    // Do not leave the previous query's lines and histogram under the error.
+    result.value = null;
+    entries.value = [];
+    histogram.value = null;
+    ranQuery.value = '';
     error.value = errorMessage(err);
   } finally {
     if (token === runToken) loading.value = false;
@@ -171,21 +176,22 @@ function startLive() {
   }
   error.value = '';
   live.value = true;
-  liveCursor = newestTimestamp(entries.value) || msToNs(Date.now() - 10_000);
+  liveCursor = new LiveCursor(newestTimestamp(entries.value) || msToNs(Date.now()), entries.value);
   void poll();
 }
 
 async function poll() {
-  if (!live.value) return;
+  if (!live.value || !liveCursor) return;
+  const cursor = liveCursor;
   try {
-    const response = await call<QueryResult>(connectionId.value, 'loki/tail', { query: ranQuery.value, start: nextNs(liveCursor) }, 30_000);
-    if (!live.value) return;
-    const fresh = response.entries ?? [];
+    const response = await call<QueryResult>(connectionId.value, 'loki/tail', { query: ranQuery.value, start: cursor.start }, 30_000);
+    if (!live.value || cursor !== liveCursor) return;
+    const fresh = cursor.accept(response.entries ?? []);
     if (fresh.length) {
-      liveCursor = newestTimestamp(fresh);
-      // tail returns oldest → newest; keep the configured display order.
-      const merged = settings.value.direction === 'backward' ? [...fresh].reverse().concat(entries.value) : entries.value.concat(fresh);
-      entries.value = settings.value.direction === 'backward' ? merged.slice(0, liveBuffer) : merged.slice(-liveBuffer);
+      // Late lines can be older than lines already shown, so re-sort instead of prepending.
+      const backward = settings.value.direction === 'backward';
+      const merged = entries.value.concat(fresh).sort((a, b) => (backward ? compareNs(b.ts, a.ts) : compareNs(a.ts, b.ts)));
+      entries.value = backward ? merged.slice(0, liveBuffer) : merged.slice(-liveBuffer);
     }
   } catch (err) {
     error.value = errorMessage(err);
