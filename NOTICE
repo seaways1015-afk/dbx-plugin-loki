@@ -1,0 +1,8 @@
+Loki plugin for DBX
+
+This project vendors the DBX Go plugin SDK in backend/sdk, copied from
+https://github.com/t8y2/dbx/tree/main/plugins/sdk/go/dbx-plugin-sdk
+(Apache License 2.0). See that repository's NOTICE file for attribution.
+
+Grafana Loki is a trademark of Grafana Labs. This plugin is an independent
+project and is not affiliated with or endorsed by Grafana Labs.

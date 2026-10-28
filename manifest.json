@@ -1,0 +1,257 @@
+{
+  "$schema": "https://raw.githubusercontent.com/t8y2/dbx/main/plugins/manifest.schema.json",
+  "manifest_version": 1,
+  "id": "io.github.dbx-loki.loki",
+  "name": "Loki",
+  "version": "0.1.0",
+  "publisher": "dbx-loki",
+  "description": "Query, browse and live-tail Grafana Loki logs with LogQL inside DBX, with read-only AI tools.",
+  "source": "https://github.com/dbx-loki/dbx-plugin-loki",
+  "homepage": "https://github.com/dbx-loki/dbx-plugin-loki",
+  "icon": "assets/plugin.svg",
+  "engines": {
+    "dbx": ">=0.6.43",
+    "host_api": "1"
+  },
+  "permissions": [
+    "host.storage",
+    "host.ai"
+  ],
+  "entrypoints": {
+    "backend": {
+      "executable": "bin/dbx-plugin-loki"
+    },
+    "ui": {
+      "root": "ui",
+      "entry": "ui/index.html"
+    }
+  },
+  "contributions": [
+    {
+      "type": "connection-provider",
+      "id": "io.github.dbx-loki.loki.connection",
+      "label": "Loki",
+      "icon": "assets/plugin.svg",
+      "database_type": "loki",
+      "description": "Connect to a Grafana Loki server or gateway over its HTTP API.",
+      "fields": [
+        {
+          "key": "display_name",
+          "label": "Connection name",
+          "type": "text",
+          "default": "Loki",
+          "binding": "name",
+          "required": true
+        },
+        {
+          "key": "scheme",
+          "label": "Protocol",
+          "type": "select",
+          "binding": "config",
+          "default": "http",
+          "options": [
+            {
+              "label": "HTTP",
+              "value": "http"
+            },
+            {
+              "label": "HTTPS",
+              "value": "https"
+            }
+          ]
+        },
+        {
+          "key": "host",
+          "label": "Host",
+          "type": "text",
+          "binding": "host",
+          "required": true,
+          "placeholder": "loki.example.com"
+        },
+        {
+          "key": "port",
+          "label": "Port",
+          "type": "number",
+          "binding": "port",
+          "required": true,
+          "default": 3100
+        },
+        {
+          "key": "context_path",
+          "label": "Path prefix",
+          "type": "text",
+          "binding": "config",
+          "default": "/",
+          "description": "Set when Loki sits behind a reverse proxy, e.g. /loki-gateway"
+        },
+        {
+          "key": "tenant",
+          "label": "Tenant ID (X-Scope-OrgID)",
+          "type": "text",
+          "binding": "config",
+          "description": "Required for multi-tenant Loki; leave empty for single-tenant setups"
+        },
+        {
+          "key": "auth_mode",
+          "label": "Authentication",
+          "type": "select",
+          "binding": "config",
+          "default": "none",
+          "options": [
+            {
+              "label": "None",
+              "value": "none"
+            },
+            {
+              "label": "Basic auth",
+              "value": "basic"
+            },
+            {
+              "label": "Bearer token",
+              "value": "bearer"
+            }
+          ]
+        },
+        {
+          "key": "username",
+          "label": "Username",
+          "type": "text",
+          "binding": "username",
+          "visible_when": {
+            "field": "auth_mode",
+            "one_of": [
+              "basic"
+            ]
+          },
+          "required_when": {
+            "field": "auth_mode",
+            "one_of": [
+              "basic"
+            ]
+          }
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "binding": "password",
+          "visible_when": {
+            "field": "auth_mode",
+            "one_of": [
+              "basic"
+            ]
+          },
+          "required_when": {
+            "field": "auth_mode",
+            "one_of": [
+              "basic"
+            ]
+          }
+        },
+        {
+          "key": "token",
+          "label": "Bearer token",
+          "type": "password",
+          "binding": "secret",
+          "visible_when": {
+            "field": "auth_mode",
+            "one_of": [
+              "bearer"
+            ]
+          },
+          "required_when": {
+            "field": "auth_mode",
+            "one_of": [
+              "bearer"
+            ]
+          }
+        },
+        {
+          "key": "insecure_skip_verify",
+          "label": "Skip TLS certificate verification",
+          "type": "boolean",
+          "binding": "config",
+          "default": false,
+          "visible_when": {
+            "field": "scheme",
+            "one_of": [
+              "https"
+            ]
+          }
+        }
+      ],
+      "workbench": "io.github.dbx-loki.loki.workbench",
+      "capabilities": [
+        "test",
+        "connect",
+        "disconnect"
+      ]
+    },
+    {
+      "type": "workbench",
+      "id": "io.github.dbx-loki.loki.workbench",
+      "label": "Loki Explorer",
+      "description": "LogQL editor, label browser, log volume and live tail.",
+      "icon": "assets/plugin.svg"
+    }
+  ],
+  "localizations": {
+    "zh-CN": {
+      "name": "Loki",
+      "description": "在 DBX 中用 LogQL 查询、浏览和实时跟踪 Grafana Loki 日志，并为 AI 助手提供只读工具。",
+      "contributions": {
+        "io.github.dbx-loki.loki.connection": {
+          "label": "Loki",
+          "description": "通过 HTTP API 连接 Grafana Loki 服务或网关。",
+          "fields": {
+            "display_name": {
+              "label": "连接名称"
+            },
+            "scheme": {
+              "label": "协议"
+            },
+            "host": {
+              "label": "主机",
+              "placeholder": "loki.example.com"
+            },
+            "port": {
+              "label": "端口"
+            },
+            "context_path": {
+              "label": "路径前缀",
+              "description": "Loki 位于反向代理之后时填写，例如 /loki-gateway"
+            },
+            "tenant": {
+              "label": "租户 ID（X-Scope-OrgID）",
+              "description": "多租户 Loki 必填；单租户部署留空"
+            },
+            "auth_mode": {
+              "label": "认证方式",
+              "options": {
+                "none": "无",
+                "basic": "Basic 认证",
+                "bearer": "Bearer Token"
+              }
+            },
+            "username": {
+              "label": "用户名"
+            },
+            "password": {
+              "label": "密码"
+            },
+            "token": {
+              "label": "Bearer Token"
+            },
+            "insecure_skip_verify": {
+              "label": "跳过 TLS 证书校验"
+            }
+          }
+        },
+        "io.github.dbx-loki.loki.workbench": {
+          "label": "Loki 日志查询",
+          "description": "LogQL 编辑器、标签浏览、日志量直方图和实时跟踪。"
+        }
+      }
+    }
+  }
+}
