@@ -285,6 +285,34 @@ func TestHistogramWrapsQuery(t *testing.T) {
 	}
 }
 
+func TestHistogramSplitsUnalignedWindowAtStepBoundaries(t *testing.T) {
+	f := newFakeLoki(t, defaultHandler)
+	p := openPlugin(t, f, f.connection())
+	// 3540 s window → 60 s step; neither edge sits on a step boundary.
+	form := queryForm{Query: `{app="api"}`, Start: "1799996417000000000", End: "1799999957000000000"}
+	raw, err := p.handle("loki/histogram", request{ConnectionID: "c1", Form: form})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls []string
+	for _, r := range f.requests[len(f.requests)-3:] {
+		v := r.URL.Query()
+		calls = append(calls, r.URL.Path+" "+v.Get("query")+" time="+v.Get("time")+" start="+v.Get("start")+" end="+v.Get("end"))
+	}
+	want := []string{
+		`/loki/api/v1/query sum(count_over_time({app="api"} [43000ms])) time=1799996460000000000 start= end=`,
+		`/loki/api/v1/query_range sum(count_over_time({app="api"} [60s])) time= start=1799996520000000000 end=1799999940000000000`,
+		`/loki/api/v1/query sum(count_over_time({app="api"} [17000ms])) time=1799999957000000000 start= end=`,
+	}
+	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("calls:\n%s\nwant:\n%s", strings.Join(calls, "\n"), strings.Join(want, "\n"))
+	}
+	result := raw.(*histogramResult)
+	if result.Step != 60 || result.Total != 42+7+42 || len(result.Buckets) != 4 {
+		t.Fatalf("histogram = %+v", result)
+	}
+}
+
 func TestTailFetchesNewestAndReturnsAscending(t *testing.T) {
 	f := newFakeLoki(t, defaultHandler)
 	p := openPlugin(t, f, f.connection())

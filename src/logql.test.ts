@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addHistory, addLabelMatcher, compareNs, detectLevel, formatTimestamp, highlightSegments, isMetricQuery,
+  addHistory, addLabelMatcher, axisTicks, compareNs, detectLevel, formatAxisTime, formatTimestamp, highlightSegments, isMetricQuery,
   lineFilterTerms, LiveCursor, msToNs, nextNs, nsToMs, selectorOf, splitMatchers, varyingLabels,
 } from './logql';
 
@@ -75,6 +75,13 @@ describe('timestamps', () => {
   it('compares nanosecond strings', () => {
     expect(compareNs('999', '1000')).toBeLessThan(0);
     expect(compareNs('1700000000000000002', '1700000000000000001')).toBeGreaterThan(0);
+  });
+  it('spaces axis ticks evenly and picks a label precision from the span', () => {
+    expect(axisTicks(0, 4000)).toEqual([0, 1000, 2000, 3000, 4000]);
+    const t = Date.UTC(2026, 9, 29, 9, 5, 7);
+    expect(formatAxisTime(t, 60_000, true)).toBe('09:05:07');
+    expect(formatAxisTime(t, 3_600_000, true)).toBe('09:05');
+    expect(formatAxisTime(t, 7 * 86_400_000, true)).toBe('10-29 09:05');
   });
   it('formats with millisecond precision', () => {
     expect(formatTimestamp('1700000000123456789', true)).toBe('2023-11-14 22:13:20.123');

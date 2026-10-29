@@ -2,9 +2,9 @@
 import { computed } from 'vue';
 import type { QueryResult } from '../bridge';
 import type { Messages } from '../i18n';
-import { seriesName } from '../logql';
+import { axisTicks, formatAxisTime, seriesName } from '../logql';
 
-const props = defineProps<{ result: QueryResult; t: Messages }>();
+const props = defineProps<{ result: QueryResult; utc: boolean; t: Messages }>();
 
 const palette = ['#4f8cf7', '#f2a33a', '#3fb27f', '#e5534b', '#a371f7', '#2fb6c4', '#d4a72c', '#db61a2'];
 
@@ -29,7 +29,12 @@ const chart = computed(() => {
       })
       .join(''),
   }));
-  return { width, height, paths, maxY };
+  const spanMs = (maxX - minX) * 1000;
+  const ticks = axisTicks(minX * 1000, maxX * 1000).map((ms, i, all) => ({
+    pct: all.length > 1 ? (i / (all.length - 1)) * 100 : 0,
+    label: formatAxisTime(ms, spanMs, props.utc),
+  }));
+  return { width, height, paths, maxY, ticks };
 });
 
 const rows = computed(() =>
@@ -45,12 +50,18 @@ const rows = computed(() =>
   <div class="metric">
     <div v-if="result.scalar" class="scalar">{{ result.scalar.v }}</div>
     <template v-else>
-      <div v-if="chart" class="chart">
-        <span class="max">{{ chart.maxY.toLocaleString() }}</span>
-        <svg :viewBox="`0 0 ${chart.width} ${chart.height}`" preserveAspectRatio="none" role="img">
-          <path v-for="(path, index) in chart.paths" :key="index" :d="path.d" :stroke="path.color" fill="none" stroke-width="1.6" vector-effect="non-scaling-stroke" />
-        </svg>
-      </div>
+      <template v-if="chart">
+        <div class="chart">
+          <span class="max">{{ chart.maxY.toLocaleString() }}</span>
+          <svg :viewBox="`0 0 ${chart.width} ${chart.height}`" preserveAspectRatio="none" role="img">
+            <line v-for="tick in chart.ticks" :key="tick.pct" class="grid" :x1="tick.pct * 10" :x2="tick.pct * 10" y1="0" :y2="chart.height" vector-effect="non-scaling-stroke" />
+            <path v-for="(path, index) in chart.paths" :key="index" :d="path.d" :stroke="path.color" fill="none" stroke-width="1.6" vector-effect="non-scaling-stroke" />
+          </svg>
+        </div>
+        <div class="axis">
+          <span v-for="(tick, index) in chart.ticks" :key="tick.pct" :class="{ first: index === 0, last: index === chart.ticks.length - 1 }" :style="{ left: `${tick.pct}%` }">{{ tick.label }}</span>
+        </div>
+      </template>
       <table>
         <thead>
           <tr><th>{{ rows.length }} {{ t.series }}</th><th class="num">{{ t.value }}</th></tr>
@@ -69,8 +80,13 @@ const rows = computed(() =>
 <style scoped>
 .metric { padding: 12px 14px; }
 .scalar { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.chart { position: relative; height: 200px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
-.chart svg { width: 100%; height: 100%; }
+.chart { position: relative; height: 200px; border-bottom: 1px solid var(--border); }
+.chart svg { width: 100%; height: 100%; overflow: visible; }
+.grid { stroke: var(--row-border); stroke-width: 1; }
+.axis { position: relative; height: 16px; margin-bottom: 12px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.axis span { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
+.axis span.first { transform: none; }
+.axis span.last { transform: translateX(-100%); }
 .max { position: absolute; top: 0; left: 0; font-size: 10px; color: var(--muted); }
 table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
 th, td { padding: 4px 8px; border-bottom: 1px solid var(--row-border); text-align: left; word-break: break-all; }

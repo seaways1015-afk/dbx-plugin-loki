@@ -14,8 +14,9 @@ const bars = computed(() => {
   const values = props.data.buckets.map(point => ({ t: point.t * 1000, v: Number(point.v) || 0 }));
   const max = Math.max(1, ...values.map(point => point.v));
   return values.map(point => {
-    // Loki stamps each bucket at its end; draw it over [t - step, t].
-    const from = Math.max(props.startMs, point.t - stepMs);
+    // Buckets are stamped at their end and start at the previous step boundary
+    // (the window edges cut the first and last bucket short).
+    const from = Math.max(props.startMs, Math.ceil(point.t / stepMs) * stepMs - stepMs);
     const to = Math.min(props.endMs, point.t);
     return {
       from,

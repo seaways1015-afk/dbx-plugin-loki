@@ -89,6 +89,22 @@ export function formatTimestamp(ns: string, utc: boolean): string {
   return `${parts[0]}-${pad(parts[1])}-${pad(parts[2])} ${pad(parts[3])}:${pad(parts[4])}:${pad(parts[5])}.${sub}`;
 }
 
+/** Evenly spaced tick times (ms) from `fromMs` to `toMs` inclusive. */
+export function axisTicks(fromMs: number, toMs: number, count = 5): number[] {
+  if (toMs <= fromMs || count < 2) return [fromMs];
+  return Array.from({ length: count }, (_, i) => fromMs + ((toMs - fromMs) * i) / (count - 1));
+}
+
+/** Axis label: seconds for spans under 2 minutes, the date for spans over a day. */
+export function formatAxisTime(ms: number, spanMs: number, utc: boolean): string {
+  const date = new Date(ms);
+  const [month, day, hours, minutes, seconds] = utc
+    ? [date.getUTCMonth() + 1, date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()]
+    : [date.getMonth() + 1, date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds()];
+  const time = spanMs < 120_000 ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}` : `${pad(hours)}:${pad(minutes)}`;
+  return spanMs > 86_400_000 ? `${pad(month)}-${pad(day)} ${time}` : time;
+}
+
 export function formatBytes(bytes: number): string {
   if (!bytes) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];

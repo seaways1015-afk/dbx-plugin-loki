@@ -31,6 +31,8 @@ const customFrom = ref('');
 const customTo = ref('');
 
 const labels = ref<string[]>([]);
+// Below 720px the label browser becomes a drawer opened from the query bar.
+const labelsOpen = ref(false);
 const labelsLoading = ref(false);
 const labelsError = ref('');
 
@@ -209,6 +211,7 @@ function stopLive() {
 
 function pickLabel(label: string, value: string, operator: '=' | '!=') {
   query.value = addLabelMatcher(query.value, label, value, operator);
+  labelsOpen.value = false;
 }
 
 function applyFilterAndRun(label: string, value: string, operator: '=' | '!=') {
@@ -349,9 +352,11 @@ onBeforeUnmount(() => {
       <h2>{{ t.notConnectedTitle }}</h2>
       <p>{{ bridgeError || t.notConnectedBody }}</p>
     </div>
-    <div v-else class="layout">
+    <div v-else class="layout" :class="{ 'labels-open': labelsOpen }">
+      <div v-if="labelsOpen" class="labels-backdrop" @click="labelsOpen = false" />
       <LabelBrowser
         ref="labelBrowser"
+        class="label-pane"
         :labels="labels"
         :loading="labelsLoading"
         :error="labelsError"
@@ -364,6 +369,7 @@ onBeforeUnmount(() => {
         <div class="query-bar">
           <LogQLEditor v-model="query" :placeholder="'{app=&quot;api&quot;} |= &quot;error&quot;'" :labels="labels" :load-values="editorValues" @run="run" />
           <div class="query-actions">
+            <button class="btn labels-toggle" type="button" :aria-expanded="labelsOpen" @click="labelsOpen = !labelsOpen">{{ t.labels }}</button>
             <button class="btn primary" type="button" :disabled="loading || !query.trim()" :title="t.runHint" @click="run">
               {{ loading ? t.running : t.run }}
             </button>
@@ -441,7 +447,7 @@ onBeforeUnmount(() => {
             <h3>{{ t.emptyTitle }}</h3>
             <p>{{ t.emptyBody }}</p>
           </div>
-          <MetricView v-else-if="result && isMetric" :result="result" :t="t" />
+          <MetricView v-else-if="result && isMetric" :result="result" :utc="settings.utc" :t="t" />
           <div v-else-if="result && !entries.length && !live" class="hint pad">{{ t.noResults }}</div>
           <LogList
             v-else-if="result"
@@ -522,7 +528,8 @@ body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-s
 <style scoped>
 .app { display: flex; flex-direction: column; height: 100%; }
 .preview-banner { padding: 4px 12px; background: #f59e0b; color: #1c1917; font-size: 12px; font-weight: 600; }
-.layout { display: grid; flex: 1; grid-template-columns: minmax(180px, 240px) 1fr; min-height: 0; }
+.layout { position: relative; display: grid; flex: 1; grid-template-columns: minmax(180px, 240px) 1fr; min-height: 0; }
+.btn.labels-toggle, .labels-backdrop { display: none; }
 .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .query-bar { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px 6px; }
 .query-actions { display: flex; gap: 6px; }
@@ -619,7 +626,19 @@ select.plain { color: var(--fg); }
 .hint.pad { padding: 24px; text-align: center; }
 @media (max-width: 720px) {
   .layout { grid-template-columns: 1fr; }
-  .layout > :first-child { display: none; }
+  .label-pane {
+    display: none;
+    position: absolute;
+    z-index: 20;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(280px, 85vw);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  }
+  .labels-open .label-pane { display: flex; }
+  .labels-open .labels-backdrop { display: block; position: absolute; z-index: 19; inset: 0; background: rgba(0, 0, 0, 0.2); }
+  .btn.labels-toggle { display: inline-flex; }
   .query-bar { flex-direction: column; align-items: stretch; }
 }
 </style>

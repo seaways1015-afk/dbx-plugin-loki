@@ -464,6 +464,13 @@ func truncateUTF8(value string, limit int) string {
 // histogram counts matching log lines per bucket by wrapping the log query in
 // count_over_time. Metric queries cannot be wrapped and return an error the
 // UI treats as "no histogram".
+//
+// Loki snaps query_range evaluation times to multiples of the step, so a range
+// query over an unaligned window would count up to one step of lines before
+// the window and after it. The full buckets between the first and last step
+// boundaries inside the window are therefore read with query_range, and the
+// partial buckets at either edge with exact instant queries. Each bucket is
+// stamped at its end; the UI draws it from the previous step boundary.
 func (s *session) histogram(form queryForm, now time.Time) (*histogramResult, error) {
 	q, err := validateQuery(form.Query)
 	if err != nil {
@@ -474,30 +481,76 @@ func (s *session) histogram(form queryForm, now time.Time) (*histogramResult, er
 		return nil, err
 	}
 	step := histogramStep(window)
-	values := url.Values{
-		"query": {fmt.Sprintf("sum(count_over_time(%s [%ds]))", q, step)},
-		"start": {nanos(window.start)},
-		"end":   {nanos(window.end)},
-		"step":  {strconv.Itoa(step) + "s"},
-	}
-	var data rawQueryData
-	if err := s.getData("/loki/api/v1/query_range", values, &data); err != nil {
-		return nil, err
-	}
-	normalized, err := normalizeQueryData(data, "forward")
-	if err != nil {
-		return nil, err
-	}
+	stepNs := int64(step) * int64(time.Second)
+	first := (window.start + stepNs - 1) / stepNs * stepNs // first boundary at or after start
+	last := window.end / stepNs * stepNs                   // last boundary at or before end
+
 	result := &histogramResult{Step: step, Buckets: []samplePoint{}}
-	for _, serie := range normalized.Series {
-		for _, point := range serie.Points {
+	add := func(points []samplePoint) {
+		for _, point := range points {
 			result.Buckets = append(result.Buckets, point)
 			if v, err := strconv.ParseFloat(point.Value, 64); err == nil {
 				result.Total += v
 			}
 		}
 	}
+	// (start, min(first, end)]: the head, or the whole window when no boundary falls inside it.
+	headEnd := min(first, window.end)
+	points, err := s.countInstant(q, window.start, headEnd)
+	if err != nil {
+		return nil, err
+	}
+	add(points)
+	if last-first >= stepNs {
+		values := url.Values{
+			"query": {fmt.Sprintf("sum(count_over_time(%s [%ds]))", q, step)},
+			"start": {nanos(first + stepNs)},
+			"end":   {nanos(last)},
+			"step":  {strconv.Itoa(step) + "s"},
+		}
+		var data rawQueryData
+		if err := s.getData("/loki/api/v1/query_range", values, &data); err != nil {
+			return nil, err
+		}
+		normalized, err := normalizeQueryData(data, "forward")
+		if err != nil {
+			return nil, err
+		}
+		for _, serie := range normalized.Series {
+			add(serie.Points)
+		}
+	}
+	if first <= last && window.end > last {
+		points, err := s.countInstant(q, last, window.end)
+		if err != nil {
+			return nil, err
+		}
+		add(points)
+	}
 	return result, nil
+}
+
+// countInstant counts the lines in (from, to] with one instant query stamped
+// at `to`. Spans shorter than a millisecond are skipped.
+func (s *session) countInstant(q string, from, to int64) ([]samplePoint, error) {
+	spanMs := (to - from) / int64(time.Millisecond)
+	if spanMs <= 0 {
+		return nil, nil
+	}
+	values := url.Values{"query": {fmt.Sprintf("sum(count_over_time(%s [%dms]))", q, spanMs)}, "time": {nanos(to)}}
+	var data rawQueryData
+	if err := s.getData("/loki/api/v1/query", values, &data); err != nil {
+		return nil, err
+	}
+	normalized, err := normalizeQueryData(data, "forward")
+	if err != nil {
+		return nil, err
+	}
+	var points []samplePoint
+	for _, serie := range normalized.Series {
+		points = append(points, serie.Points...)
+	}
+	return points, nil
 }
 
 // histogramStep picks a "nice" bucket width yielding about histogramBuckets bars.
