@@ -16,6 +16,10 @@ type Settings = { range: string; limit: number; direction: 'backward' | 'forward
 
 const liveIntervalMs = 2000;
 const liveBuffer = 5000;
+// A failed poll is retried with a growing delay (4, 8, 16, 16, 16 s) before
+// live tail gives up, so a short network or Loki hiccup does not stop it.
+const liveMaxRetries = 5;
+const liveMaxDelayMs = 16_000;
 
 const locale = ref(window.dbxPlugin?.locale ?? navigator.language);
 const t = computed(() => messages(locale.value));
@@ -40,12 +44,15 @@ const result = shallowRef<QueryResult | null>(null);
 const entries = shallowRef<LogEntry[]>([]);
 const histogram = shallowRef<HistogramResult | null>(null);
 const resultWindow = ref({ startMs: 0, endMs: 0 });
+// Loki returned as many lines as the limit asked for, so more may match.
+const limitHit = ref(false);
 const loading = ref(false);
 const error = ref('');
 const notice = ref('');
 const ranQuery = ref('');
 
 const live = ref(false);
+const liveFailures = ref(0);
 let liveTimer: ReturnType<typeof setTimeout> | undefined;
 let liveCursor: LiveCursor | undefined;
 let runToken = 0;
@@ -143,6 +150,7 @@ async function run() {
     result.value = queryResult;
     entries.value = queryResult.entries ?? [];
     histogram.value = queryResult.resultType === 'streams' ? volume : null;
+    limitHit.value = queryResult.resultType === 'streams' && queryResult.stats.entries >= settings.value.limit;
     resultWindow.value = range;
     ranQuery.value = q;
     logList.value?.resetPaging();
@@ -152,6 +160,7 @@ async function run() {
     result.value = null;
     entries.value = [];
     histogram.value = null;
+    limitHit.value = false;
     ranQuery.value = '';
     error.value = errorMessage(err);
   } finally {
@@ -178,6 +187,7 @@ function startLive() {
   }
   error.value = '';
   live.value = true;
+  liveFailures.value = 0;
   liveCursor = new LiveCursor(newestTimestamp(entries.value) || msToNs(Date.now()), entries.value);
   void poll();
 }
@@ -195,9 +205,16 @@ async function poll() {
       const merged = entries.value.concat(fresh).sort((a, b) => (backward ? compareNs(b.ts, a.ts) : compareNs(a.ts, b.ts)));
       entries.value = backward ? merged.slice(0, liveBuffer) : merged.slice(-liveBuffer);
     }
+    liveFailures.value = 0;
   } catch (err) {
-    error.value = errorMessage(err);
-    stopLive();
+    if (!live.value || cursor !== liveCursor) return;
+    liveFailures.value += 1;
+    if (liveFailures.value > liveMaxRetries) {
+      error.value = errorMessage(err);
+      stopLive();
+      return;
+    }
+    liveTimer = setTimeout(poll, Math.min(liveIntervalMs * 2 ** liveFailures.value, liveMaxDelayMs));
     return;
   }
   liveTimer = setTimeout(poll, liveIntervalMs);
@@ -221,8 +238,9 @@ function applyFilterAndRun(label: string, value: string, operator: '=' | '!=') {
 
 function zoom(startMs: number, endMs: number) {
   settings.value.range = 'custom';
+  // The inputs hold whole minutes: round the start down and the end up.
   customFrom.value = msToDatetimeLocal(startMs);
-  customTo.value = msToDatetimeLocal(endMs + 60_000);
+  customTo.value = msToDatetimeLocal(Math.ceil(endMs / 60_000) * 60_000);
   void run();
 }
 
@@ -435,8 +453,10 @@ onBeforeUnmount(() => {
 
         <div v-if="result" class="stats">
           <span v-if="live" class="live-badge"><span class="dot" />{{ t.liveOn }}</span>
+          <span v-if="live && liveFailures" class="warn">{{ t.liveRetrying }} ({{ liveFailures }}/{{ liveMaxRetries }})</span>
           <span>{{ statsLine }}</span>
           <span v-if="result.truncated" class="warn">· {{ t.truncated }}</span>
+          <span v-else-if="limitHit && !live" class="warn">· {{ t.limitReached }}</span>
           <span class="spacer" />
           <span v-if="notice" class="notice">{{ notice }}</span>
           <button v-if="canAskAi && !isMetric && entries.length" class="btn small" type="button" @click="askAi">{{ t.askAi }}</button>

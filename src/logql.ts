@@ -39,7 +39,8 @@ export const liveOverlapMs = 10_000;
 
 type LiveEntry = { ts: string; line: string; labels: Record<string, string> };
 
-function liveKey(entry: LiveEntry): string {
+/** Identity of a log line across responses: timestamp, stream labels and text. */
+export function entryKey(entry: LiveEntry): string {
   const labels = Object.keys(entry.labels).sort().map(key => `${key}=${entry.labels[key]}`).join(',');
   return `${entry.ts}\u0000${labels}\u0000${entry.line}`;
 }
@@ -63,7 +64,7 @@ export class LiveCursor {
   accept<T extends LiveEntry>(entries: T[]): T[] {
     const fresh: T[] = [];
     for (const entry of entries) {
-      const key = liveKey(entry);
+      const key = entryKey(entry);
       if (this.seen.has(key)) continue;
       this.seen.set(key, entry.ts);
       fresh.push(entry);
@@ -179,34 +180,51 @@ export function lineFilterTerms(query: string): { text: string; regex: boolean }
 
 export type Segment = { text: string; match: boolean };
 
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Turns a line filter term into a JS RegExp. LogQL regexes are RE2 and often
+ * start with inline flags such as `(?i)`, which JS rejects, so a leading flag
+ * group is translated into RegExp flags. Invalid patterns match literally.
+ */
+function termPattern(term: { text: string; regex: boolean }): RegExp {
+  if (!term.regex) return new RegExp(escapeRegExp(term.text), 'g');
+  let source = term.text;
+  let flags = 'g';
+  const inline = source.match(/^\(\?([imsU]+)\)/);
+  if (inline) {
+    source = source.slice(inline[0].length);
+    for (const flag of new Set(inline[1])) if (flag !== 'U') flags += flag;
+  }
+  try {
+    return new RegExp(source, flags);
+  } catch {
+    return new RegExp(escapeRegExp(term.text), 'g');
+  }
+}
+
 export function highlightSegments(line: string, terms: { text: string; regex: boolean }[]): Segment[] {
   if (!terms.length || !line) return [{ text: line, match: false }];
-  const sources = terms.map(term => {
-    if (!term.regex) return term.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    try {
-      new RegExp(term.text);
-      return term.text;
-    } catch {
-      return term.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Each term keeps its own flags; overlapping matches are merged.
+  const ranges: [number, number][] = [];
+  for (const term of terms) {
+    for (const match of line.matchAll(termPattern(term))) {
+      if (match[0]) ranges.push([match.index ?? 0, (match.index ?? 0) + match[0].length]);
     }
-  });
-  let pattern: RegExp;
-  try {
-    pattern = new RegExp(sources.map(source => `(?:${source})`).join('|'), 'g');
-  } catch {
-    return [{ text: line, match: false }];
   }
+  if (!ranges.length) return [{ text: line, match: false }];
+  ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
   const segments: Segment[] = [];
   let last = 0;
-  for (const match of line.matchAll(pattern)) {
-    if (!match[0]) continue;
-    const index = match.index ?? 0;
-    if (index > last) segments.push({ text: line.slice(last, index), match: false });
-    segments.push({ text: match[0], match: true });
-    last = index + match[0].length;
+  for (const [start, end] of ranges) {
+    if (end <= last) continue;
+    const from = Math.max(start, last);
+    if (from > last) segments.push({ text: line.slice(last, from), match: false });
+    segments.push({ text: line.slice(from, end), match: true });
+    last = end;
   }
   if (last < line.length) segments.push({ text: line.slice(last), match: false });
-  return segments.length ? segments : [{ text: line, match: false }];
+  return segments;
 }
 
 export type Level = 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'unknown';

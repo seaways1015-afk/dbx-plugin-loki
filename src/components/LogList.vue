@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import type { LogEntry } from '../bridge';
 import type { Messages } from '../i18n';
-import { detectLevel, formatTimestamp, highlightSegments, varyingLabels } from '../logql';
+import { detectLevel, entryKey, formatTimestamp, highlightSegments, varyingLabels } from '../logql';
 
 const props = defineProps<{
   entries: LogEntry[];
@@ -20,18 +20,27 @@ const pageSize = 1000;
 const shown = ref(pageSize);
 const expanded = ref<Set<string>>(new Set());
 
-const keyOf = (entry: LogEntry, index: number) => `${entry.ts}:${entry.stream}:${index}`;
+// Keys must not depend on the row position: live tail inserts lines above
+// existing ones, and an expanded row has to stay expanded.
 const varying = computed(() => varyingLabels(props.entries));
-const rows = computed(() =>
-  props.entries.slice(0, shown.value).map((entry, index) => ({
-    entry,
-    key: keyOf(entry, index),
+const rows = computed(() => {
+  const seen = new Map<string, number>();
+  return props.entries.slice(0, shown.value).map(entry => {
+    const base = entryKey(entry);
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return { entry, key: n ? `${base}#${n}` : base, ...describe(entry) };
+  });
+});
+
+function describe(entry: LogEntry) {
+  return {
     level: detectLevel(entry.labels, entry.line),
     time: formatTimestamp(entry.ts, props.utc),
     chips: varying.value.filter(key => key in entry.labels).map(key => [key, entry.labels[key]] as const),
     segments: highlightSegments(entry.line, props.terms),
-  })),
-);
+  };
+}
 
 function toggle(key: string) {
   const next = new Set(expanded.value);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addHistory, addLabelMatcher, axisTicks, compareNs, detectLevel, formatAxisTime, formatTimestamp, highlightSegments, isMetricQuery,
+  addHistory, addLabelMatcher, axisTicks, compareNs, detectLevel, entryKey, formatAxisTime, formatTimestamp, highlightSegments, isMetricQuery,
   lineFilterTerms, LiveCursor, msToNs, nextNs, nsToMs, selectorOf, splitMatchers, varyingLabels,
 } from './logql';
 
@@ -46,6 +46,16 @@ describe('line filters and highlighting', () => {
     const segments = highlightSegments('upstream timeout after timeout', [{ text: 'timeout', regex: false }]);
     expect(segments.filter(segment => segment.match).length).toBe(2);
     expect(segments.map(segment => segment.text).join('')).toBe('upstream timeout after timeout');
+  });
+  it('honours RE2 inline flags such as (?i)', () => {
+    const terms = lineFilterTerms('{app="api"} |~ "(?i)error"');
+    expect(highlightSegments('level=ERROR msg=Error', terms).filter(segment => segment.match).map(segment => segment.text)).toEqual(['ERROR', 'Error']);
+  });
+  it('keeps each term case-sensitive or not on its own and merges overlaps', () => {
+    const terms = [{ text: 'Time', regex: false }, { text: '(?i)timeout', regex: true }];
+    const segments = highlightSegments('time TIMEOUT Timeout', terms);
+    expect(segments.filter(segment => segment.match).map(segment => segment.text)).toEqual(['TIMEOUT', 'Timeout']);
+    expect(segments.map(segment => segment.text).join('')).toBe('time TIMEOUT Timeout');
   });
   it('escapes invalid regular expressions instead of throwing', () => {
     expect(highlightSegments('a(b', [{ text: '(', regex: true }]).some(segment => segment.match)).toBe(true);
@@ -109,6 +119,11 @@ describe('LiveCursor', () => {
   it('treats equal timestamps in different streams or with different lines as distinct', () => {
     const cursor = new LiveCursor(s(100));
     expect(cursor.accept([api(101, 'x'), worker(101, 'x'), api(101, 'y')])).toHaveLength(3);
+  });
+  it('gives a line the same key in every response, whatever its position or stream id', () => {
+    const line = { ts: s(101), line: 'x', labels: { b: '2', a: '1' } };
+    expect(entryKey({ ...line, stream: 0 } as typeof line)).toBe(entryKey({ ...line, labels: { a: '1', b: '2' }, stream: 7 } as typeof line));
+    expect(entryKey(line)).not.toBe(entryKey({ ...line, line: 'y' }));
   });
   it('forgets lines that left the overlap window', () => {
     const cursor = new LiveCursor(s(100), [api(95, 'old')]);
