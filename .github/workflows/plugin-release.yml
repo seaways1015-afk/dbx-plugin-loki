@@ -9,7 +9,8 @@ permissions:
 
 jobs:
   release:
-    uses: t8y2/dbx/.github/workflows/plugin-release-reusable.yml@plugin-sdk-v1
+    # Pinned to the commit of tag plugin-cli-v0.1.9 (there is no plugin-sdk-v1 ref).
+    uses: t8y2/dbx/.github/workflows/plugin-release-reusable.yml@4a42a2bd295185b026144f50052421795447e47c
     with:
       release-tag: ${{ github.event.release.tag_name }}
       package-command: npm ci --ignore-scripts && npm run build && dbx-plugin package .
