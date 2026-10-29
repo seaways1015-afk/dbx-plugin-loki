@@ -11,7 +11,7 @@ import (
 )
 
 const pluginID = "io.github.seaways1015-afk.loki"
-const version = "0.1.0"
+const version = "0.1.1"
 
 type request struct {
 	Connection   connection      `json:"connection"`

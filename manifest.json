@@ -3,7 +3,7 @@
   "manifest_version": 1,
   "id": "io.github.seaways1015-afk.loki",
   "name": "Loki",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "seaways1015-afk",
   "description": "Query, browse and live-tail Grafana Loki logs with LogQL inside DBX, with read-only AI tools.",
   "source": "https://github.com/seaways1015-afk/dbx-plugin-loki",
